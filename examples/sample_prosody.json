@@ -1,0 +1,40 @@
+{
+  "utterance_id": "example-001",
+  "text": "そう",
+  "sample_rate": 24000,
+  "speaker_id": "example",
+  "teacher_id": "synthetic-example",
+  "schema_version": 1,
+  "moras": [
+    {
+      "text": "そ",
+      "start_s": 0.0,
+      "end_s": 0.1,
+      "consonant": "s",
+      "vowel": "o",
+      "consonant_duration_s": 0.03,
+      "vowel_duration_s": 0.07,
+      "energy_dbfs": -20.0,
+      "pause_after_s": 0.0,
+      "f0_contour": [
+        {"offset_s": 0.04, "hz": 180.0},
+        {"offset_s": 0.07, "hz": 190.0}
+      ]
+    },
+    {
+      "text": "う",
+      "start_s": 0.1,
+      "end_s": 0.24,
+      "consonant": null,
+      "vowel": "u",
+      "consonant_duration_s": 0.0,
+      "vowel_duration_s": 0.14,
+      "energy_dbfs": -17.0,
+      "pause_after_s": 0.35,
+      "f0_contour": [
+        {"offset_s": 0.02, "hz": 200.0},
+        {"offset_s": 0.1, "hz": 230.0}
+      ]
+    }
+  ]
+}

@@ -1,10 +1,10 @@
 # LayaSpeech
 
-LayaSpeech is an experimental framework for real-time expressive speech synthesis using Laya as a low-latency prosody controller.
+**LayaSpeech** is an experimental framework for real-time expressive speech synthesis using [Laya](https://github.com/NandhaKishorM/laya) as a low-latency prosody controller.
 
-Instead of generating audio directly with Laya, LayaSpeech distills speaking behavior from a teacher TTS system and learns how speech should be delivered: pitch, duration, energy, pauses, emphasis, and other prosodic controls.
+Instead of generating audio directly with Laya, LayaSpeech distills speaking behavior from a teacher TTS system and learns **how speech should be delivered**: pitch, duration, energy, pauses, and related prosodic controls.
 
-The predicted parameters are then passed to a lightweight speech synthesizer for low-latency or streaming audio generation.
+The predicted controls are passed to a lightweight speech synthesizer for low-latency or streaming audio generation.
 
 ## Concept
 
@@ -17,9 +17,9 @@ Generated speech
     ↓
 Alignment / acoustic analysis
     ↓
-Pitch / duration / energy / pause / ...
+High-resolution prosody dataset
     ↓
-Laya training dataset
+Laya target conversion
     ↓
 Fine-tuned Laya
 ```
@@ -31,48 +31,95 @@ Text + context
       ↓
 Fine-tuned Laya
       ↓
-Prosody parameters
+Prosody controls
       ↓
 Streaming synthesizer
       ↓
 Audio
 ```
 
-The goal is to separate how to speak from audio generation itself.
+The goal is to separate **how to speak** from **audio generation itself**.
 
-A relatively heavy TTS model can therefore be used offline as a teacher, while a lightweight Laya-based policy and synthesizer handle real-time inference.
+A relatively heavy TTS model can be used offline as a teacher, while a lightweight Laya-based policy and synthesizer handle real-time inference.
 
-## Planned components
+## PoC scope
 
-- Teacher TTS adapter interface
-- Automatic speech generation pipeline
-- Phoneme / mora alignment
-- Pitch (F0) extraction
-- Duration extraction
-- Energy extraction
-- Pause and phrase-boundary extraction
-- Common prosody dataset format
-- Laya fine-tuning pipeline
-- Real-time prosody inference
-- Streaming synthesis interface
-- Pluggable synthesizer backends
+The first PoC targets Japanese speech and predicts five controls per focused mora:
+
+- relative pitch level (7 levels)
+- pitch direction (`falling` / `level` / `rising`)
+- relative duration (7 levels)
+- relative energy (7 levels)
+- following pause (`none` / `short` / `medium` / `long`)
+
+Teacher-side acoustic data retains the original F0 contour and timings instead of only the quantized Laya targets. This keeps the dataset reusable if the target representation changes later.
+
+See [`docs/POC.md`](docs/POC.md) for the current boundaries and success criteria.
+
+## Repository layout
+
+```text
+src/layaspeech/
+├── schema.py       # teacher-agnostic high-resolution prosody schema
+├── targets.py      # acoustic features -> compact Laya targets
+├── policy.py       # Laya request/inference adapter
+├── adapters.py     # teacher, analyzer, synthesizer interfaces
+└── cli.py
+
+examples/
+tests/
+docs/
+```
+
+## Development
+
+Python 3.11+ is used for the PoC.
+
+```bash
+uv sync --extra dev
+uv run pytest
+```
+
+Inspect the target conversion using the synthetic example:
+
+```bash
+uv run layaspeech targets examples/sample_prosody.json
+```
+
+Laya itself is an optional dependency during dataset/schema development:
+
+```bash
+uv sync --extra laya
+```
+
+The initial Japanese runtime uses Laya's multilingual checkpoint unless a fine-tuned checkpoint is supplied.
 
 ## What is not included
 
-This repository is intended to contain the framework and training pipeline only.
+This repository contains the framework and training/runtime plumbing only.
 
-It does not distribute:
+It does **not** distribute:
 
-- Teacher TTS model weights
-- Teacher-generated speech datasets
-- Reference speaker recordings
-- Proprietary or third-party voice data
-- Project-specific fine-tuned Laya checkpoints
+- teacher TTS model weights
+- teacher-generated speech datasets
+- reference speaker recordings
+- proprietary or third-party voice data
+- project-specific fine-tuned Laya checkpoints
 
 Users are responsible for supplying teacher models and training data that they have the right to use.
 
 ## Status
 
-Early experimental project.
+Early PoC.
 
-The initial goal is to validate whether a small Laya-based decision model can reproduce useful prosodic behavior from a higher-quality TTS system while remaining fast enough for real-time speech generation.
+Completed foundation:
+
+- common high-resolution prosody schema
+- relative speaker/teacher baseline calculation
+- first 7-level target quantization
+- Laya request builder for five prosody controls
+- swappable teacher/analyzer/synthesizer interfaces
+- dependency-free dataset inspection CLI
+- unit tests for schema and target conversion
+
+Next blocker: automatic Japanese mora alignment and acoustic feature extraction from teacher-generated audio.

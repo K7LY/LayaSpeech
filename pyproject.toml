@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "layaspeech"
+version = "0.0.1"
+description = "Real-time speech prosody control with Laya"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+laya = ["laya>=0.3.6"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+layaspeech = "layaspeech.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
