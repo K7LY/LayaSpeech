@@ -1,4 +1,4 @@
-"""Small dependency-free CLI for inspecting and exporting PoC datasets."""
+"""CLI for the LayaSpeech proof of concept."""
 
 from __future__ import annotations
 
@@ -33,8 +33,42 @@ def _targets(path: Path) -> int:
 
 def _export(inputs: list[Path], output: Path) -> int:
     utterances = [UtteranceProsody.load(path) for path in inputs]
+    output.parent.mkdir(parents=True, exist_ok=True)
     count = export_jsonl(utterances, output)
     print(f"exported {count} mora training cases to {output}")
+    return 0
+
+
+def _moras(text: str) -> int:
+    from .alignment import text_to_katakana_moras
+
+    print(json.dumps(text_to_katakana_moras(text), ensure_ascii=False))
+    return 0
+
+
+def _analyze(
+    *,
+    text: str,
+    audio: Path,
+    output: Path,
+    utterance_id: str,
+    teacher_id: str | None,
+    speaker_id: str | None,
+    mfa_executable: str,
+) -> int:
+    from .alignment import MfaMoraAligner, MfaWorldAnalyzer
+
+    analyzer = MfaWorldAnalyzer(MfaMoraAligner(executable=mfa_executable))
+    utterance = analyzer.analyze(
+        utterance_id=utterance_id,
+        text=text,
+        audio_path=audio,
+        teacher_id=teacher_id,
+        speaker_id=speaker_id,
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    utterance.save(output)
+    print(f"wrote {len(utterance.moras)} aligned moras to {output}")
     return 0
 
 
@@ -54,6 +88,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export.add_argument("inputs", type=Path, nargs="+")
     export.add_argument("-o", "--output", type=Path, required=True)
+
+    moras = subparsers.add_parser(
+        "moras",
+        help="show OpenJTalk Katakana mora segmentation for Japanese text",
+    )
+    moras.add_argument("text")
+
+    analyze = subparsers.add_parser(
+        "analyze",
+        help="run MFA + WORLD on one known-text WAV and write UtteranceProsody JSON",
+    )
+    analyze.add_argument("text")
+    analyze.add_argument("audio", type=Path)
+    analyze.add_argument("-o", "--output", type=Path, required=True)
+    analyze.add_argument("--utterance-id", default="utterance-001")
+    analyze.add_argument("--teacher-id")
+    analyze.add_argument("--speaker-id")
+    analyze.add_argument("--mfa-executable", default="mfa")
+
     return parser
 
 
@@ -63,6 +116,18 @@ def main() -> int:
         return _targets(args.input)
     if args.command == "export-jsonl":
         return _export(args.inputs, args.output)
+    if args.command == "moras":
+        return _moras(args.text)
+    if args.command == "analyze":
+        return _analyze(
+            text=args.text,
+            audio=args.audio,
+            output=args.output,
+            utterance_id=args.utterance_id,
+            teacher_id=args.teacher_id,
+            speaker_id=args.speaker_id,
+            mfa_executable=args.mfa_executable,
+        )
     raise AssertionError("unreachable")
 
 
