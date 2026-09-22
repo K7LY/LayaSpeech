@@ -54,14 +54,16 @@ The first PoC targets Japanese speech and predicts five controls per focused mor
 
 Teacher-side acoustic data retains the original F0 contour and timings instead of only the quantized Laya targets. This keeps the dataset reusable if the target representation changes later.
 
-See [`docs/POC.md`](docs/POC.md) for the current boundaries and success criteria.
+See [`docs/POC.md`](docs/POC.md) and [`docs/ANALYSIS.md`](docs/ANALYSIS.md).
 
 ## Repository layout
 
 ```text
 src/layaspeech/
 ├── schema.py       # teacher-agnostic high-resolution prosody schema
+├── analysis.py     # WORLD F0/energy extraction from aligned moras
 ├── targets.py      # acoustic features -> compact Laya targets
+├── dataset.py      # Laya-compatible training JSONL export
 ├── policy.py       # Laya request/inference adapter
 ├── adapters.py     # teacher, analyzer, synthesizer interfaces
 └── cli.py
@@ -80,16 +82,23 @@ uv sync --extra dev
 uv run pytest
 ```
 
-Inspect the target conversion using the synthetic example:
+Inspect target conversion using the synthetic example:
 
 ```bash
 uv run layaspeech targets examples/sample_prosody.json
 ```
 
-Laya itself is an optional dependency during dataset/schema development:
+Export analyzed utterances to the `state/questions/gold` JSONL shape used by Laya fine-tuning:
+
+```bash
+uv run layaspeech export-jsonl examples/sample_prosody.json -o train.jsonl
+```
+
+Optional components:
 
 ```bash
 uv sync --extra laya
+uv sync --extra analysis
 ```
 
 The initial Japanese runtime uses Laya's multilingual checkpoint unless a fine-tuned checkpoint is supplied.
@@ -118,8 +127,10 @@ Completed foundation:
 - relative speaker/teacher baseline calculation
 - first 7-level target quantization
 - Laya request builder for five prosody controls
+- Laya-compatible fine-tuning JSONL export
 - swappable teacher/analyzer/synthesizer interfaces
-- dependency-free dataset inspection CLI
-- unit tests for schema and target conversion
+- WORLD-based F0 and energy extraction for aligned moras
+- dependency-free dataset inspection/export CLI
+- unit tests for schema, targets, dataset export, and analysis helpers
 
-Next blocker: automatic Japanese mora alignment and acoustic feature extraction from teacher-generated audio.
+Current blocker: automatic Japanese phone-to-mora alignment from forced-aligner output.
