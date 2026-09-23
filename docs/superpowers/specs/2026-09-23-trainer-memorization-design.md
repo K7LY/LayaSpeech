@@ -42,4 +42,3 @@ Evaluation is label-index based at the model boundary and semantic-control based
 - Tiny duration-only training reaches at least 95% training accuracy on one utterance and shows clear memorization on 4 and 10 utterances. A failure to reach this threshold blocks claims about teacher quality or data quantity.
 - CE-only and RLCD+CE are compared using identical examples, initial checkpoint, seed, and optimizer settings.
 - A causal classification is supported by measured evidence among trainer bug, RLCD/loss issue, multi-task interference, data shortage, feature/target design, or Laya suitability.
-
