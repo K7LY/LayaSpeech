@@ -14,6 +14,8 @@ from .schema import MoraFeatures, UtteranceProsody
 PitchDirection = Literal["falling", "level", "rising"]
 PauseClass = Literal["none", "short", "medium", "long"]
 
+_PITCH_THRESHOLDS_SEMITONES = (-12.0, -6.0, -2.0, 2.0, 6.0, 12.0)
+
 
 @dataclass(frozen=True, slots=True)
 class ProsodyBaseline:
@@ -135,7 +137,7 @@ def derive_targets(
                 text=mora.text,
                 pitch_level=_seven_level(
                     pitch_delta_st,
-                    (-4.0, -2.0, -0.75, 0.75, 2.0, 4.0),
+                    _PITCH_THRESHOLDS_SEMITONES,
                 ),
                 pitch_direction=_pitch_direction(mora),
                 duration_level=_seven_level(

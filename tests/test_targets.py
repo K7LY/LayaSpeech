@@ -1,3 +1,5 @@
+import math
+
 from layaspeech.policy import build_mora_request
 from layaspeech.schema import F0Point, MoraFeatures, UtteranceProsody
 from layaspeech.targets import ProsodyBaseline, derive_targets
@@ -59,6 +61,36 @@ def test_targets_are_bounded_and_pause_is_detected() -> None:
     assert all(-3 <= t.energy_level <= 3 for t in targets)
     assert targets[1].pause_after == "long"
     assert targets[1].pitch_direction == "rising"
+
+
+def test_pitch_levels_reserve_endpoints_for_large_deviations() -> None:
+    baseline = ProsodyBaseline(f0_hz=100.0, mora_duration_s=0.1, energy_dbfs=-20.0)
+
+    def pitch_level(semitones: float) -> int:
+        hz = 100.0 * math.pow(2.0, semitones / 12.0)
+        utterance = UtteranceProsody(
+            utterance_id=f"pitch-{semitones}",
+            text="カ",
+            sample_rate=24_000,
+            moras=(
+                MoraFeatures(
+                    text="カ",
+                    start_s=0.0,
+                    end_s=0.1,
+                    vowel="a",
+                    vowel_duration_s=0.1,
+                    energy_dbfs=-20.0,
+                    f0_contour=(F0Point(0.05, hz),),
+                ),
+            ),
+        )
+        return derive_targets(utterance, baseline)[0].pitch_level
+
+    assert pitch_level(-13.0) == -3
+    assert pitch_level(-5.0) == -1
+    assert pitch_level(0.0) == 0
+    assert pitch_level(5.0) == 1
+    assert pitch_level(13.0) == 3
 
 
 def test_laya_request_batches_five_controls() -> None:
