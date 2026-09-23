@@ -1,6 +1,9 @@
+from pathlib import Path
+from subprocess import CompletedProcess
+
 import pytest
 
-from layaspeech.alignment import parse_mfa_json, split_katakana_moras
+from layaspeech.alignment import MfaMoraAligner, parse_mfa_json, split_katakana_moras
 
 
 def test_split_katakana_moras() -> None:
@@ -50,3 +53,28 @@ def test_parse_mfa_json_rejects_count_mismatch() -> None:
     }
     with pytest.raises(ValueError, match="count mismatch"):
         parse_mfa_json(payload, ("カ", "ナ"))
+
+
+def test_mfa_aligner_uses_robust_default_beam(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    audio = tmp_path / "sample.wav"
+    audio.touch()
+    observed_command: list[str] = []
+
+    def fake_run(command: list[str], **_: object) -> CompletedProcess[str]:
+        observed_command.extend(command)
+        output_path = Path(command[6])
+        output_path.write_text(
+            '{"tiers":{"words":{"entries":[[0,0.1,"\u30ab"]]},'
+            '"phones":{"entries":[[0,0.1,"a"]]}}}',
+            encoding="utf-8",
+        )
+        return CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("layaspeech.alignment.subprocess.run", fake_run)
+
+    MfaMoraAligner().align("カ", audio)
+
+    beam_index = observed_command.index("--beam")
+    assert observed_command[beam_index + 1] == "100"

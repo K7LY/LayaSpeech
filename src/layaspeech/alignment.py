@@ -164,6 +164,7 @@ class MfaMoraAligner:
     dictionary_model: str = "japanese_mfa"
     acoustic_model: str = "japanese_mfa"
     g2p_model: str = "japanese_katakana_mfa"
+    beam: int = 100
     timeout_s: float = 180.0
 
     def align(self, text: str, audio_path: str | Path) -> tuple[AlignedMora, ...]:
@@ -199,6 +200,8 @@ class MfaMoraAligner:
                 "--no_tokenization",
                 "--g2p_model_path",
                 self.g2p_model,
+                "--beam",
+                str(self.beam),
                 "--clean",
             ]
             try:
