@@ -1,7 +1,7 @@
-"""Thin Laya adapter for PoC inference.
+"""Thin Laya adapter for low-latency prosody inference.
 
-Laya is intentionally isolated here so the schema and dataset pipeline remain
-usable without installing torch/transformers.
+Laya is intentionally isolated here so dataset generation and acoustic analysis
+remain usable without torch/transformers.
 """
 
 from __future__ import annotations
@@ -20,6 +20,86 @@ _LEVELS = [
     "very high",
 ]
 
+_DURATION_LEVELS = [
+    "much shorter",
+    "shorter",
+    "slightly shorter",
+    "normal",
+    "slightly longer",
+    "longer",
+    "much longer",
+]
+
+
+def _questions_for_mora(index: int, mora: str) -> dict[str, dict[str, Any]]:
+    prefix = f"m{index:04d}"
+    focus = f"mora index {index} ({mora!r})"
+    return {
+        f"{prefix}_pitch_level": {
+            "type": "score",
+            "instructions": f"Relative pitch of {focus} versus this speaker's baseline.",
+            "criteria": _LEVELS,
+        },
+        f"{prefix}_pitch_direction": {
+            "type": "choice",
+            "instructions": f"Pitch movement across {focus}.",
+            "criteria": {
+                "falling": "pitch falls",
+                "level": "pitch stays approximately level",
+                "rising": "pitch rises",
+            },
+        },
+        f"{prefix}_duration_level": {
+            "type": "score",
+            "instructions": f"Relative duration of {focus} versus normal speech.",
+            "criteria": _DURATION_LEVELS,
+        },
+        f"{prefix}_energy_level": {
+            "type": "score",
+            "instructions": f"Relative vocal energy of {focus} versus normal speech.",
+            "criteria": _LEVELS,
+        },
+        f"{prefix}_pause_after": {
+            "type": "choice",
+            "instructions": f"Pause immediately after {focus}.",
+            "criteria": {
+                "none": "no meaningful pause",
+                "short": "brief pause",
+                "medium": "clear phrase pause",
+                "long": "long pause or sentence boundary",
+            },
+        },
+    }
+
+
+def build_chunk_request(
+    *,
+    text: str,
+    moras: list[str] | tuple[str, ...],
+    start_index: int,
+    end_index: int,
+    previous_text: str | None = None,
+    next_text: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build one Laya forward-pass request for several consecutive moras."""
+
+    if not 0 <= start_index < end_index <= len(moras):
+        raise ValueError("chunk must satisfy 0 <= start_index < end_index <= len(moras)")
+
+    state = {
+        "utterance": text,
+        "moras": list(moras),
+        "chunk_start": start_index,
+        "chunk_end": end_index,
+        "previous_context": previous_text or "",
+        "next_context": next_text or "",
+    }
+
+    questions: dict[str, Any] = {}
+    for index in range(start_index, end_index):
+        questions.update(_questions_for_mora(index, moras[index]))
+    return state, questions
+
 
 def build_mora_request(
     *,
@@ -29,69 +109,39 @@ def build_mora_request(
     previous_text: str | None = None,
     next_text: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Build one batched Laya request for a focused mora."""
+    """Compatibility helper returning the five unprefixed questions for one mora."""
 
-    if not 0 <= mora_index < len(moras):
-        raise IndexError("mora_index out of range")
-
-    state = {
-        "utterance": text,
-        "moras": list(moras),
-        "focus_index": mora_index,
-        "focus_mora": moras[mora_index],
-        "previous_context": previous_text or "",
-        "next_context": next_text or "",
-    }
-    questions = {
-        "pitch_level": {
-            "type": "score",
-            "instructions": "Relative pitch of the focused mora versus this speaker's baseline.",
-            "criteria": _LEVELS,
-        },
-        "pitch_direction": {
-            "type": "choice",
-            "instructions": "Pitch movement across the focused mora.",
-            "criteria": {
-                "falling": "pitch falls",
-                "level": "pitch stays approximately level",
-                "rising": "pitch rises",
-            },
-        },
-        "duration_level": {
-            "type": "score",
-            "instructions": "Relative duration of the focused mora versus normal speech.",
-            "criteria": [
-                "much shorter",
-                "shorter",
-                "slightly shorter",
-                "normal",
-                "slightly longer",
-                "longer",
-                "much longer",
-            ],
-        },
-        "energy_level": {
-            "type": "score",
-            "instructions": "Relative vocal energy of the focused mora versus normal speech.",
-            "criteria": _LEVELS,
-        },
-        "pause_after": {
-            "type": "choice",
-            "instructions": "Pause immediately after the focused mora.",
-            "criteria": {
-                "none": "no meaningful pause",
-                "short": "brief pause",
-                "medium": "clear phrase pause",
-                "long": "long pause or sentence boundary",
-            },
-        },
-    }
+    state, prefixed = build_chunk_request(
+        text=text,
+        moras=moras,
+        start_index=mora_index,
+        end_index=mora_index + 1,
+        previous_text=previous_text,
+        next_text=next_text,
+    )
+    prefix = f"m{mora_index:04d}_"
+    questions = {key.removeprefix(prefix): value for key, value in prefixed.items()}
+    state["focus_index"] = mora_index
+    state["focus_mora"] = moras[mora_index]
     return state, questions
 
 
 def _score_to_level(answer: dict[str, Any]) -> int:
     score = float(answer["score"])
     return max(-3, min(3, round(score) - 3))
+
+
+def _parse_one(answers: dict[str, Any], index: int, mora: str) -> dict[str, Any]:
+    prefix = f"m{index:04d}"
+    return {
+        "mora_index": index,
+        "text": mora,
+        "pitch_level": _score_to_level(answers[f"{prefix}_pitch_level"]),
+        "pitch_direction": answers[f"{prefix}_pitch_direction"]["choice"],
+        "duration_level": _score_to_level(answers[f"{prefix}_duration_level"]),
+        "energy_level": _score_to_level(answers[f"{prefix}_energy_level"]),
+        "pause_after": answers[f"{prefix}_pause_after"]["choice"],
+    }
 
 
 @dataclass(slots=True)
@@ -117,6 +167,62 @@ class LayaProsodyPolicy:
                 subfolder=self.subfolder,
             )
 
+    def predict_chunk(
+        self,
+        *,
+        text: str,
+        moras: list[str] | tuple[str, ...],
+        start_index: int,
+        end_index: int,
+        previous_text: str | None = None,
+        next_text: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Predict several moras in one Laya forward pass."""
+
+        state, questions = build_chunk_request(
+            text=text,
+            moras=moras,
+            start_index=start_index,
+            end_index=end_index,
+            previous_text=previous_text,
+            next_text=next_text,
+        )
+        result = self.agent.predict(state, questions)
+        answers = result["answers"]
+        return [
+            _parse_one(answers, index, moras[index])
+            for index in range(start_index, end_index)
+        ]
+
+    def predict_utterance(
+        self,
+        *,
+        text: str,
+        moras: list[str] | tuple[str, ...],
+        chunk_size: int = 4,
+        previous_text: str | None = None,
+        next_text: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Predict a full utterance using bounded multi-mora forward passes."""
+
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be > 0")
+
+        predictions: list[dict[str, Any]] = []
+        for start in range(0, len(moras), chunk_size):
+            end = min(len(moras), start + chunk_size)
+            predictions.extend(
+                self.predict_chunk(
+                    text=text,
+                    moras=moras,
+                    start_index=start,
+                    end_index=end,
+                    previous_text=previous_text,
+                    next_text=next_text,
+                )
+            )
+        return predictions
+
     def predict_mora(
         self,
         *,
@@ -126,20 +232,13 @@ class LayaProsodyPolicy:
         previous_text: str | None = None,
         next_text: str | None = None,
     ) -> dict[str, Any]:
-        state, questions = build_mora_request(
+        """Predict one mora; mainly useful for debugging."""
+
+        return self.predict_chunk(
             text=text,
             moras=moras,
-            mora_index=mora_index,
+            start_index=mora_index,
+            end_index=mora_index + 1,
             previous_text=previous_text,
             next_text=next_text,
-        )
-        result = self.agent.predict(state, questions)
-        answers = result["answers"]
-        return {
-            "pitch_level": _score_to_level(answers["pitch_level"]),
-            "pitch_direction": answers["pitch_direction"]["choice"],
-            "duration_level": _score_to_level(answers["duration_level"]),
-            "energy_level": _score_to_level(answers["energy_level"]),
-            "pause_after": answers["pause_after"]["choice"],
-            "raw": result,
-        }
+        )[0]

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from .policy import build_mora_request
+from .policy import build_chunk_request
 from .schema import UtteranceProsody
 from .targets import MoraTarget, ProsodyBaseline, derive_targets
 
@@ -17,54 +17,69 @@ def _one_hot(keys: list[str], selected: str) -> dict[str, float]:
     return {key: 1.0 if key == selected else 0.0 for key in keys}
 
 
-def build_training_case(
-    utterance: UtteranceProsody,
+def _gold_for_target(
     target: MoraTarget,
-) -> dict[str, Any]:
-    """Build one focused-mora case using Laya's state/questions/gold convention."""
-
-    moras = tuple(mora.text for mora in utterance.moras)
-    state, questions = build_mora_request(
-        text=utterance.text,
-        moras=moras,
-        mora_index=target.mora_index,
-    )
-
-    gold = {
-        "pitch_level": {
+    questions: dict[str, Any],
+) -> dict[str, dict[str, dict[str, float]]]:
+    prefix = f"m{target.mora_index:04d}"
+    return {
+        f"{prefix}_pitch_level": {
             "probabilities": _one_hot(
                 [str(i) for i in range(7)],
                 str(target.pitch_level + 3),
             )
         },
-        "pitch_direction": {
+        f"{prefix}_pitch_direction": {
             "probabilities": _one_hot(
-                list(questions["pitch_direction"]["criteria"]),
+                list(questions[f"{prefix}_pitch_direction"]["criteria"]),
                 target.pitch_direction,
             )
         },
-        "duration_level": {
+        f"{prefix}_duration_level": {
             "probabilities": _one_hot(
                 [str(i) for i in range(7)],
                 str(target.duration_level + 3),
             )
         },
-        "energy_level": {
+        f"{prefix}_energy_level": {
             "probabilities": _one_hot(
                 [str(i) for i in range(7)],
                 str(target.energy_level + 3),
             )
         },
-        "pause_after": {
+        f"{prefix}_pause_after": {
             "probabilities": _one_hot(
-                list(questions["pause_after"]["criteria"]),
+                list(questions[f"{prefix}_pause_after"]["criteria"]),
                 target.pause_after,
             )
         },
     }
+
+
+def build_training_chunk_case(
+    utterance: UtteranceProsody,
+    targets: tuple[MoraTarget, ...],
+    *,
+    start_index: int,
+    end_index: int,
+) -> dict[str, Any]:
+    """Build one multi-mora case matching the runtime request structure."""
+
+    moras = tuple(mora.text for mora in utterance.moras)
+    state, questions = build_chunk_request(
+        text=utterance.text,
+        moras=moras,
+        start_index=start_index,
+        end_index=end_index,
+    )
+    gold: dict[str, Any] = {}
+    for target in targets[start_index:end_index]:
+        gold.update(_gold_for_target(target, questions))
+
     return {
         "utterance_id": utterance.utterance_id,
-        "mora_index": target.mora_index,
+        "start_index": start_index,
+        "end_index": end_index,
         "state": state,
         "questions": questions,
         "gold": gold,
@@ -84,8 +99,13 @@ def to_upstream_row(case: dict[str, Any]) -> dict[str, str]:
 def export_jsonl(
     utterances: Iterable[UtteranceProsody],
     output_path: str | Path,
+    *,
+    chunk_size: int = 4,
 ) -> int:
-    """Export one Laya training case per mora using a corpus-wide baseline."""
+    """Export chunked Laya training cases using a corpus-wide baseline."""
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be > 0")
 
     records = tuple(utterances)
     if not records:
@@ -95,8 +115,17 @@ def export_jsonl(
     count = 0
     with Path(output_path).open("w", encoding="utf-8", newline="\n") as handle:
         for utterance in records:
-            for target in derive_targets(utterance, baseline):
-                row = to_upstream_row(build_training_case(utterance, target))
+            targets = derive_targets(utterance, baseline)
+            for start in range(0, len(targets), chunk_size):
+                end = min(len(targets), start + chunk_size)
+                row = to_upstream_row(
+                    build_training_chunk_case(
+                        utterance,
+                        targets,
+                        start_index=start,
+                        end_index=end,
+                    )
+                )
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
                 count += 1
     return count

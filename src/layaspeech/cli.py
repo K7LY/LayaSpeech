@@ -31,11 +31,11 @@ def _targets(path: Path) -> int:
     return 0
 
 
-def _export(inputs: list[Path], output: Path) -> int:
+def _export(inputs: list[Path], output: Path, chunk_size: int) -> int:
     utterances = [UtteranceProsody.load(path) for path in inputs]
     output.parent.mkdir(parents=True, exist_ok=True)
-    count = export_jsonl(utterances, output)
-    print(f"exported {count} mora training cases to {output}")
+    count = export_jsonl(utterances, output, chunk_size=chunk_size)
+    print(f"exported {count} chunk training cases to {output}")
     return 0
 
 
@@ -84,10 +84,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     export = subparsers.add_parser(
         "export-jsonl",
-        help="export analyzed utterances to Laya-compatible state/questions/gold JSONL",
+        help="export analyzed utterances to chunked Laya fine-tuning JSONL",
     )
     export.add_argument("inputs", type=Path, nargs="+")
     export.add_argument("-o", "--output", type=Path, required=True)
+    export.add_argument("--chunk-size", type=int, default=4)
 
     moras = subparsers.add_parser(
         "moras",
@@ -115,7 +116,7 @@ def main() -> int:
     if args.command == "targets":
         return _targets(args.input)
     if args.command == "export-jsonl":
-        return _export(args.inputs, args.output)
+        return _export(args.inputs, args.output, args.chunk_size)
     if args.command == "moras":
         return _moras(args.text)
     if args.command == "analyze":
