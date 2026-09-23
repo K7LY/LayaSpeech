@@ -73,6 +73,9 @@ def test_mfa_aligner_uses_robust_default_beam(
         return CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr("layaspeech.alignment.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "layaspeech.alignment.text_to_katakana_moras", lambda text: ("カ",)
+    )
 
     MfaMoraAligner().align("カ", audio)
 
