@@ -9,7 +9,6 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 import json
-import math
 from typing import Any, Iterable, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode

@@ -121,6 +121,18 @@ uv run layaspeech predict "今日はいい天気ですね。" \
   --checkpoint checkpoints/layaspeech
 ```
 
+With a local VOICEVOX Engine already running, stream synthesis to a WAV file:
+
+```bash
+uv run layaspeech synthesize "今日はいい天気ですね。" \
+  --checkpoint checkpoints/layaspeech \
+  --speaker 1 \
+  --output outputs/example.wav
+```
+
+See [`docs/VOICEVOX.md`](docs/VOICEVOX.md) for the current backend mapping and
+its limitations.
+
 Optional analysis/frontend dependencies:
 
 ```bash
@@ -168,5 +180,11 @@ Completed foundation:
 Current blockers before the first real end-to-end result:
 
 - validate MFA mora-token alignment against real teacher WAVs, especially `ッ` and `ー`;
-- choose and implement the first synthesizer backend that accepts LayaSpeech controls;
-- benchmark quality and first-audio latency on a real distilled checkpoint.
+- generate a real teacher corpus and fine-tuned checkpoint;
+- run the VOICEVOX streaming backend against that checkpoint;
+- benchmark quality and first-audio latency.
+
+The first concrete synthesizer backend is VOICEVOX Engine. Normal AudioQuery
+currently maps LayaSpeech pitch level and duration directly, plus existing
+phrase-boundary pauses. Pitch direction and per-mora energy remain available in
+the common schema for a richer future backend.

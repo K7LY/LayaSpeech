@@ -159,6 +159,49 @@ def _predict(
     return 0
 
 
+def _synthesize(
+    *,
+    text: str,
+    checkpoint: Path,
+    output: Path,
+    speaker: int,
+    voicevox_url: str,
+    device: str | None,
+    chunk_size: int,
+    segment_length: float,
+) -> int:
+    from .backends.voicevox import VoicevoxSynthesizer
+    from .policy import LayaProsodyPolicy
+    from .runtime import StreamingProsodyPlanner, StreamingSpeechRuntime
+
+    policy = LayaProsodyPolicy(
+        model_id=str(checkpoint),
+        subfolder=None,
+        device=device,
+    )
+    runtime = StreamingSpeechRuntime(
+        planner=StreamingProsodyPlanner(
+            policy=policy,
+            chunk_size=chunk_size,
+        ),
+        synthesizer=VoicevoxSynthesizer(
+            speaker=speaker,
+            base_url=voicevox_url,
+            segment_length=segment_length,
+        ),
+    )
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
+    with output.open("wb") as handle:
+        for audio_chunk in runtime.synthesize_stream(text):
+            handle.write(audio_chunk)
+            written += len(audio_chunk)
+
+    print(f"wrote {written} streaming audio bytes to {output}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="layaspeech")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -229,6 +272,19 @@ def build_parser() -> argparse.ArgumentParser:
     predict.add_argument("--device")
     predict.add_argument("--chunk-size", type=int, default=4)
 
+    synthesize = subparsers.add_parser(
+        "synthesize",
+        help="fine-tuned Laya -> VOICEVOX streaming synthesis -> WAV",
+    )
+    synthesize.add_argument("text")
+    synthesize.add_argument("--checkpoint", type=Path, required=True)
+    synthesize.add_argument("--output", type=Path, required=True)
+    synthesize.add_argument("--speaker", type=int, required=True)
+    synthesize.add_argument("--voicevox-url", default="http://127.0.0.1:50021")
+    synthesize.add_argument("--device")
+    synthesize.add_argument("--chunk-size", type=int, default=4)
+    synthesize.add_argument("--segment-length", type=float, default=0.3)
+
     return parser
 
 
@@ -278,6 +334,17 @@ def main() -> int:
             checkpoint=args.checkpoint,
             device=args.device,
             chunk_size=args.chunk_size,
+        )
+    if args.command == "synthesize":
+        return _synthesize(
+            text=args.text,
+            checkpoint=args.checkpoint,
+            output=args.output,
+            speaker=args.speaker,
+            voicevox_url=args.voicevox_url,
+            device=args.device,
+            chunk_size=args.chunk_size,
+            segment_length=args.segment_length,
         )
     raise AssertionError("unreachable")
 
