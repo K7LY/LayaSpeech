@@ -31,10 +31,20 @@ def _targets(path: Path) -> int:
     return 0
 
 
-def _export(inputs: list[Path], output: Path, chunk_size: int) -> int:
+def _export(
+    inputs: list[Path],
+    output: Path,
+    chunk_size: int,
+    pitch_reference: str,
+) -> int:
     utterances = [UtteranceProsody.load(path) for path in inputs]
     output.parent.mkdir(parents=True, exist_ok=True)
-    count = export_jsonl(utterances, output, chunk_size=chunk_size)
+    count = export_jsonl(
+        utterances,
+        output,
+        chunk_size=chunk_size,
+        pitch_reference=pitch_reference,
+    )
     print(f"exported {count} chunk training cases to {output}")
     return 0
 
@@ -225,6 +235,11 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("inputs", type=Path, nargs="+")
     export.add_argument("-o", "--output", type=Path, required=True)
     export.add_argument("--chunk-size", type=int, default=4)
+    export.add_argument(
+        "--pitch-reference",
+        choices=("speaker", "utterance"),
+        default="speaker",
+    )
 
     moras = subparsers.add_parser(
         "moras",
@@ -308,7 +323,7 @@ def main() -> int:
     if args.command == "targets":
         return _targets(args.input)
     if args.command == "export-jsonl":
-        return _export(args.inputs, args.output, args.chunk_size)
+        return _export(args.inputs, args.output, args.chunk_size, args.pitch_reference)
     if args.command == "moras":
         return _moras(args.text)
     if args.command == "analyze":

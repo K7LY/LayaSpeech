@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .diagnostics import level_to_score_index
 from .policy import build_chunk_request
@@ -103,6 +103,7 @@ def export_jsonl(
     output_path: str | Path,
     *,
     chunk_size: int = 4,
+    pitch_reference: Literal["speaker", "utterance"] = "speaker",
 ) -> int:
     """Export chunked Laya training cases using a corpus-wide baseline."""
 
@@ -117,7 +118,11 @@ def export_jsonl(
     count = 0
     with Path(output_path).open("w", encoding="utf-8", newline="\n") as handle:
         for utterance in records:
-            targets = derive_targets(utterance, baseline)
+            targets = derive_targets(
+                utterance,
+                baseline,
+                pitch_reference=pitch_reference,
+            )
             for start in range(0, len(targets), chunk_size):
                 end = min(len(targets), start + chunk_size)
                 row = to_upstream_row(

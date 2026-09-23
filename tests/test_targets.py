@@ -1,5 +1,7 @@
 import math
 
+import pytest
+
 from layaspeech.policy import build_mora_request
 from layaspeech.schema import F0Point, MoraFeatures, UtteranceProsody
 from layaspeech.targets import ProsodyBaseline, derive_targets
@@ -107,3 +109,50 @@ def test_laya_request_batches_five_controls() -> None:
         "energy_level",
         "pause_after",
     }
+
+
+def test_utterance_pitch_reference_removes_voice_register() -> None:
+    def utterance(identifier: str, scale: float) -> UtteranceProsody:
+        return UtteranceProsody(
+            utterance_id=identifier,
+            text="あい",
+            sample_rate=24_000,
+            moras=(
+                MoraFeatures(
+                    text="あ",
+                    start_s=0.0,
+                    end_s=0.1,
+                    vowel="a",
+                    vowel_duration_s=0.1,
+                    energy_dbfs=-20.0,
+                    f0_contour=(F0Point(0.05, 100.0 * scale),),
+                ),
+                MoraFeatures(
+                    text="い",
+                    start_s=0.1,
+                    end_s=0.2,
+                    vowel="i",
+                    vowel_duration_s=0.1,
+                    energy_dbfs=-20.0,
+                    f0_contour=(F0Point(0.05, 200.0 * scale),),
+                ),
+            ),
+        )
+
+    low = utterance("low", 1.0)
+    high = utterance("high", 4.0)
+    baseline = ProsodyBaseline.from_utterances([low, high])
+
+    low_targets = derive_targets(low, baseline, pitch_reference="utterance")
+    high_targets = derive_targets(high, baseline, pitch_reference="utterance")
+
+    assert [target.pitch_level for target in low_targets] == [
+        target.pitch_level for target in high_targets
+    ]
+
+
+def test_pitch_reference_rejects_unknown_mode() -> None:
+    utterance = sample()
+    baseline = ProsodyBaseline.from_utterances([utterance])
+    with pytest.raises(ValueError, match="pitch_reference"):
+        derive_targets(utterance, baseline, pitch_reference="mystery")
