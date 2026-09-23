@@ -1,26 +1,20 @@
 # VOICEVOX backend
 
-The first concrete runtime backend targets a separately running
-VOICEVOX-compatible Engine over HTTP.
+The first concrete runtime backend targets a separately running VOICEVOX-compatible Engine over HTTP. LayaSpeech does not bundle VOICEVOX code, voices, or model weights.
 
-LayaSpeech does not bundle VOICEVOX code, voices, or model weights.
+For complete setup, start with [Getting Started](GETTING_STARTED.md).
 
-## Why this backend
+## Engine
 
-The current VOICEVOX Engine exposes:
+The default endpoint is `http://127.0.0.1:50021`. Find available style IDs with:
 
-- editable per-mora pitch;
-- editable consonant/vowel duration;
-- AudioQuery-based synthesis;
-- `/streaming_synthesis` for incremental audio delivery.
+```powershell
+Invoke-RestMethod http://127.0.0.1:50021/speakers | ConvertTo-Json -Depth 10
+```
 
-That is enough to validate the core LayaSpeech idea without writing a vocoder
-for the PoC.
+Use a returned `style.id` as `--speaker`.
 
-## Mapping
-
-The normal VOICEVOX speech AudioQuery can represent only part of the common
-LayaSpeech control schema.
+## Current mapping
 
 | LayaSpeech control | VOICEVOX PoC mapping |
 | --- | --- |
@@ -30,18 +24,10 @@ LayaSpeech control schema.
 | pitch direction | not represented by normal AudioQuery |
 | per-mora energy | not represented by normal AudioQuery |
 
-The unsupported controls remain in the common schema so a later frame-level or
-custom synthesizer can use them.
+Unsupported controls remain in the common schema for future backends.
 
 ## Streaming
 
-`VoicevoxSynthesizer.synthesize_stream()`:
+`VoicevoxSynthesizer.synthesize_stream()` requests an AudioQuery, applies supported controls, posts it to `/streaming_synthesis`, and yields returned WAV bytes incrementally.
 
-1. requests a normal AudioQuery;
-2. applies LayaSpeech controls;
-3. posts the modified query to `/streaming_synthesis`;
-4. yields the returned WAV bytes incrementally.
-
-The Laya policy currently plans all prosody chunks for one sentence before
-starting the VOICEVOX request. Sentence/clause segmentation should happen above
-this layer when integrating with a token-streaming LLM.
+The current runtime plans the sentence's prosody before starting the VOICEVOX request. Sentence/clause segmentation should sit above this layer when integrating a token-streaming LLM.
