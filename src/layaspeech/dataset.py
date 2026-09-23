@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from .diagnostics import level_to_score_index
 from .policy import build_chunk_request
 from .schema import UtteranceProsody
 from .targets import MoraTarget, ProsodyBaseline, derive_targets
@@ -27,7 +28,7 @@ def _gold_for_target(
         f"{prefix}_pitch_level": {
             "probabilities": _one_hot(
                 [str(i) for i in range(7)],
-                str(target.pitch_level + 3),
+                str(level_to_score_index(target.pitch_level)),
             )
         },
         f"{prefix}_pitch_direction": {
@@ -39,13 +40,13 @@ def _gold_for_target(
         f"{prefix}_duration_level": {
             "probabilities": _one_hot(
                 [str(i) for i in range(7)],
-                str(target.duration_level + 3),
+                str(level_to_score_index(target.duration_level)),
             )
         },
         f"{prefix}_energy_level": {
             "probabilities": _one_hot(
                 [str(i) for i in range(7)],
-                str(target.energy_level + 3),
+                str(level_to_score_index(target.energy_level)),
             )
         },
         f"{prefix}_pause_after": {

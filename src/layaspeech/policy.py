@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .diagnostics import score_index_to_level
+
 _LEVELS = [
     "very low",
     "low",
@@ -126,8 +128,7 @@ def build_mora_request(
 
 
 def _score_to_level(answer: dict[str, Any]) -> int:
-    score = float(answer["score"])
-    return max(-3, min(3, round(score) - 3))
+    return score_index_to_level(answer["score"])
 
 
 def _parse_one(answers: dict[str, Any], index: int, mora: str) -> dict[str, Any]:

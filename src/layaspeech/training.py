@@ -122,7 +122,10 @@ def _build_items(rows: Iterable[dict[str, Any]], agent: Any) -> list[dict[str, A
             )
             expected = len(render_options(internal))
             if len(markers) != expected:
-                continue
+                raise ValueError(
+                    f"question {qid!r} marker/option mismatch: "
+                    f"got {len(markers)}, expected {expected}"
+                )
             items.append(
                 {
                     "ids": sequence,
