@@ -16,6 +16,15 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+CONTROL_NAMES = (
+    "pitch_level",
+    "pitch_direction",
+    "duration_level",
+    "energy_level",
+    "pause_after",
+)
+LOSS_MODES = ("ce", "rlcd_ce")
+
 
 @dataclass(frozen=True, slots=True)
 class TrainingConfig:
@@ -31,6 +40,9 @@ class TrainingConfig:
     max_grad_norm: float = 1.0
     validation_fraction: float = 0.1
     seed: int = 42
+    loss_mode: str = "rlcd_ce"
+    control_names: tuple[str, ...] = ()
+    diagnostic_steps: tuple[int, ...] = (0, 1, 10, 100)
 
     def __post_init__(self) -> None:
         if self.epochs <= 0:
@@ -39,6 +51,13 @@ class TrainingConfig:
             raise ValueError("micro_batch/grad_accum must be > 0 and group_size > 1")
         if not 0.0 <= self.validation_fraction < 0.5:
             raise ValueError("validation_fraction must be in [0, 0.5)")
+        if self.loss_mode not in LOSS_MODES:
+            raise ValueError(f"loss_mode must be one of {LOSS_MODES!r}")
+        invalid_controls = set(self.control_names) - set(CONTROL_NAMES)
+        if invalid_controls:
+            raise ValueError(f"unsupported control names: {sorted(invalid_controls)!r}")
+        if any(step < 0 for step in self.diagnostic_steps):
+            raise ValueError("diagnostic steps must be >= 0")
 
 
 def _load_rows(path: str | Path) -> list[dict[str, Any]]:
@@ -99,7 +118,11 @@ def _to_internal(q: dict[str, Any]) -> dict[str, Any]:
     return {"t": qtype, "ins": instructions, "crit": criteria}
 
 
-def _build_items(rows: Iterable[dict[str, Any]], agent: Any) -> list[dict[str, Any]]:
+def _build_items(
+    rows: Iterable[dict[str, Any]],
+    agent: Any,
+    control_names: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
     from laya.common import QTYPES, build_sequence, render_options
 
     cfg = agent.cfg
@@ -109,6 +132,8 @@ def _build_items(rows: Iterable[dict[str, Any]], agent: Any) -> list[dict[str, A
         questions = row["questions"]
         gold = row["gold"]
         for qid, q in questions.items():
+            if control_names and not any(qid.endswith(f"_{name}") for name in control_names):
+                continue
             if qid not in gold:
                 continue
             internal = _to_internal(q)
@@ -139,6 +164,87 @@ def _build_items(rows: Iterable[dict[str, Any]], agent: Any) -> list[dict[str, A
     if not items:
         raise ValueError("no valid Laya training items could be built")
     return items
+
+
+def _supervised_cross_entropy(logits: Any, target: Any, mask: Any) -> Any:
+    import torch
+
+    masked_logits = logits.float().masked_fill(~mask, -1e4)
+    return -(target * torch.log_softmax(masked_logits, -1)).sum(-1).mean()
+
+
+def combine_training_loss(loss_ce: Any, loss_rlcd: Any, loss_mode: str) -> Any:
+    """Combine loss terms without letting RLCD affect a CE-only experiment."""
+
+    if loss_mode == "ce":
+        return loss_ce
+    if loss_mode == "rlcd_ce":
+        return loss_ce + loss_rlcd
+    raise ValueError(f"unsupported loss_mode: {loss_mode!r}")
+
+
+def _parameter_gradient_norm(parameters: Iterable[Any]) -> float:
+    total = 0.0
+    for parameter in parameters:
+        if parameter.grad is not None:
+            total += float(parameter.grad.detach().float().pow(2).sum().cpu())
+    return math.sqrt(total)
+
+
+def _diagnostic_snapshot(model: Any, logits: Any, mask: Any) -> dict[str, Any]:
+    import torch
+
+    named_parameters = list(model.named_parameters())
+    encoder_parameters = [
+        parameter
+        for name, parameter in named_parameters
+        if name.startswith("encoder.") or ".encoder." in name
+    ]
+    head_parameters = [
+        parameter
+        for name, parameter in named_parameters
+        if not (name.startswith("encoder.") or ".encoder." in name)
+    ]
+    valid_logits = logits.float().masked_select(mask)
+    masked_logits = logits.float().masked_fill(~mask, -1e4)
+    probabilities = torch.softmax(masked_logits, -1) * mask
+    entropy = -(probabilities * torch.log(probabilities.clamp_min(1e-9))).sum(-1)
+    return {
+        "gradient_norm": _parameter_gradient_norm(parameter for _, parameter in named_parameters),
+        "encoder_gradient_norm": _parameter_gradient_norm(encoder_parameters),
+        "decision_head_gradient_norm": _parameter_gradient_norm(head_parameters),
+        "logits_mean": float(valid_logits.mean().detach().cpu()),
+        "logits_std": float(valid_logits.std(unbiased=False).detach().cpu()),
+        "softmax_entropy": float(entropy.mean().detach().cpu()),
+        "predicted_top1_class": masked_logits.argmax(-1).detach().cpu().tolist(),
+    }
+
+
+def _capture_diagnostic(
+    agent: Any,
+    items: list[dict[str, Any]],
+    device: Any,
+) -> dict[str, Any]:
+    import torch
+    from laya.common import collate_items
+
+    batch = collate_items([[item] for item in items], agent.tok.pad_token_id)
+    model = agent.model
+    was_training = model.training
+    model.eval()
+    with torch.no_grad():
+        logits, _ = model(
+            batch["input_ids"].to(device),
+            batch["attention_mask"].to(device),
+            batch["marker_pos"].to(device),
+            batch["marker_mask"].to(device),
+            batch["qtype"].to(device),
+        )
+    snapshot = _diagnostic_snapshot(model, logits, batch["marker_mask"].to(device))
+    snapshot["qids"] = [item["qid"] for item in items]
+    snapshot["gold_labels"] = [item["label"] for item in items]
+    model.train(was_training)
+    return snapshot
 
 
 def _device_from_string(torch: Any, requested: str | None) -> Any:
@@ -271,8 +377,10 @@ def train_local(
         training_rows = validation_rows
         validation_rows = []
 
-    train_items = _build_items(training_rows, agent)
-    val_items = _build_items(validation_rows, agent) if validation_rows else []
+    train_items = _build_items(training_rows, agent, config.control_names)
+    val_items = (
+        _build_items(validation_rows, agent, config.control_names) if validation_rows else []
+    )
 
     encoder_params = [
         parameter
@@ -307,7 +415,15 @@ def train_local(
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp and amp_dtype == torch.float16)
 
     history: list[dict[str, Any]] = []
+    diagnostic_items = train_items[: max(1, config.micro_batch)]
+    diagnostic_steps = set(config.diagnostic_steps)
+    diagnostic_snapshots: list[dict[str, Any]] = []
+    global_step = 0
     optimizer.zero_grad(set_to_none=True)
+    if 0 in diagnostic_steps:
+        diagnostic_snapshots.append(
+            {"step": 0, **_capture_diagnostic(agent, diagnostic_items, resolved_device)}
+        )
 
     for epoch in range(config.epochs):
         rng.shuffle(train_items)
@@ -340,44 +456,47 @@ def train_local(
             qtype = batch["qtype"].to(resolved_device)
             option_count = mask.sum(-1, keepdim=True).float()
 
-            epsilon = (
-                torch.randn(
-                    (config.group_size,) + logits.shape,
-                    device=resolved_device,
+            loss_ce = _supervised_cross_entropy(logits, target, mask)
+            loss_rl = logits.new_zeros(())
+            if config.loss_mode == "rlcd_ce":
+                epsilon = (
+                    torch.randn(
+                        (config.group_size,) + logits.shape,
+                        device=resolved_device,
+                    )
+                    * sigma
+                    * mask
                 )
-                * sigma
-                * mask
-            )
-            epsilon = (
-                epsilon - epsilon.sum(-1, keepdim=True) / option_count
-            ) * mask
-            sampled_logits = logits.detach().unsqueeze(0) + epsilon
-            sampled_probs = torch.softmax(
-                sampled_logits.masked_fill(~mask, -1e4),
-                -1,
-            )
-
-            with torch.no_grad():
-                reward = proper_reward(
-                    sampled_probs,
-                    target.unsqueeze(0),
-                    qtype,
-                    mask,
-                    w_sph=0.75,
-                    w_rps=1.0,
+                epsilon = (
+                    epsilon - epsilon.sum(-1, keepdim=True) / option_count
+                ) * mask
+                sampled_logits = logits.detach().unsqueeze(0) + epsilon
+                sampled_probs = torch.softmax(
+                    sampled_logits.masked_fill(~mask, -1e4),
+                    -1,
                 )
-                advantage = reward - reward.mean(0, keepdim=True)
-                advantage = advantage / (advantage.std() + 1e-6)
 
-            log_probability = -(
-                ((sampled_logits - logits.unsqueeze(0)) ** 2) * mask
-            ).sum(-1) / (2 * sigma**2)
-            loss_rl = -(advantage * log_probability).mean()
-            loss_ce = -(
-                target
-                * torch.log_softmax(logits.masked_fill(~mask, -1e4), -1)
-            ).sum(-1).mean()
-            loss = (loss_rl + loss_ce) / config.grad_accum + 0.0 * act.sum()
+                with torch.no_grad():
+                    reward = proper_reward(
+                        sampled_probs,
+                        target.unsqueeze(0),
+                        qtype,
+                        mask,
+                        w_sph=0.75,
+                        w_rps=1.0,
+                    )
+                    advantage = reward - reward.mean(0, keepdim=True)
+                    advantage = advantage / (advantage.std() + 1e-6)
+
+                log_probability = -(
+                    ((sampled_logits - logits.unsqueeze(0)) ** 2) * mask
+                ).sum(-1) / (2 * sigma**2)
+                loss_rl = -(advantage * log_probability).mean()
+            loss = (
+                combine_training_loss(loss_ce, loss_rl, config.loss_mode)
+                / config.grad_accum
+                + 0.0 * act.sum()
+            )
 
             if scaler.is_enabled():
                 scaler.scale(loss).backward()
@@ -395,11 +514,25 @@ def train_local(
                 else:
                     optimizer.step()
                 scheduler.step()
+                global_step += 1
+                if global_step in diagnostic_steps:
+                    diagnostic_snapshots.append(
+                        {
+                            "step": global_step,
+                            **_capture_diagnostic(agent, diagnostic_items, resolved_device),
+                        }
+                    )
                 optimizer.zero_grad(set_to_none=True)
 
             epoch_losses.append(float(loss.detach().cpu()) * config.grad_accum)
 
-        metrics = _evaluate(
+        train_metrics = _evaluate(
+            agent,
+            train_items,
+            resolved_device,
+            max(1, config.micro_batch),
+        )
+        validation_metrics = _evaluate(
             agent,
             val_items,
             resolved_device,
@@ -407,9 +540,11 @@ def train_local(
         )
         record = {
             "epoch": epoch + 1,
-            "train_loss": sum(epoch_losses) / max(1, len(epoch_losses)),
-            "validation_loss": metrics["loss"],
-            "validation_accuracy": metrics["accuracy"],
+            "optimization_loss": sum(epoch_losses) / max(1, len(epoch_losses)),
+            "train_loss": train_metrics["loss"],
+            "train_accuracy": train_metrics["accuracy"],
+            "validation_loss": validation_metrics["loss"],
+            "validation_accuracy": validation_metrics["accuracy"],
             "sigma": sigma,
         }
         history.append(record)
@@ -425,6 +560,7 @@ def train_local(
                 "train_items": len(train_items),
                 "validation_items": len(val_items),
                 "history": history,
+                "diagnostic_snapshots": diagnostic_snapshots,
             },
         )
 
@@ -436,6 +572,7 @@ def train_local(
         "train_items": len(train_items),
         "validation_items": len(val_items),
         "history": history,
+        "diagnostic_snapshots": diagnostic_snapshots,
     }
     _save_checkpoint(agent, Path(output_dir), final_meta)
     return final_meta
