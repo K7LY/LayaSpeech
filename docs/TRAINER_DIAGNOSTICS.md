@@ -30,17 +30,19 @@ the held-out majority baseline:
 
 | Control | Train | Held-out | Held-out majority | Held-out MAE |
 | --- | ---: | ---: | ---: | ---: |
-| pitch direction | 100% | 34.1% | 39.0% | n/a |
+| pitch direction | 100% | 34.1% | 34.1% | n/a |
 | duration | 100% | 29.3% | 42.7% | 2.04 |
-| global pitch | 100% | 6.1% | 32.9% | 2.80 |
-| energy | 100% | 28.0% | 22.0% | 1.17 |
+| global pitch | 100% | 6.1% | 17.1% | 2.80 |
+| energy | 100% | 28.0% | 15.9% | 1.17 |
 
 The no-reference Irodori corpus does not have a stable speaker register.
 Utterance median F0 ranged from about 88 Hz to 621 Hz, while the target used a
 single corpus-wide median. This made speaker/voice identity look like prosody.
 Utterance-local pitch residuals improved held-out pitch from 6.1% / 2.80 MAE
 to 43.9% / 0.70 MAE, though 30 sentences still did not beat its 51.2%
-majority baseline.
+train-majority baseline. All held-out baselines in this note use the majority
+class selected from training labels; the held-out labels do not select their
+own baseline class.
 
 The acoustic audit also found 13 within-mora F0 jumps above eight semitones and
 one clear isolated jump candidate. Those cases need review or filtering, but
