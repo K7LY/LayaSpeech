@@ -72,6 +72,36 @@ def _analyze(
     return 0
 
 
+def _build_corpus(
+    *,
+    manifest: Path,
+    output_dir: Path,
+    teacher_config: Path,
+    chunk_size: int,
+    mfa_executable: str,
+    no_resume: bool,
+) -> int:
+    from .alignment import MfaMoraAligner, MfaWorldAnalyzer
+    from .corpus import build_corpus, load_manifest
+    from .teacher_config import load_command_teacher
+
+    teacher, teacher_id = load_command_teacher(teacher_config)
+    result = build_corpus(
+        items=load_manifest(manifest),
+        teacher=teacher,
+        analyzer=MfaWorldAnalyzer(MfaMoraAligner(executable=mfa_executable)),
+        output_dir=output_dir,
+        teacher_id=teacher_id,
+        chunk_size=chunk_size,
+        resume=not no_resume,
+    )
+    print(
+        f"analyzed {len(result.analyzed)} utterances; "
+        f"training data: {result.training_jsonl}"
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="layaspeech")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -108,6 +138,17 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--speaker-id")
     analyze.add_argument("--mfa-executable", default="mfa")
 
+    corpus = subparsers.add_parser(
+        "build-corpus",
+        help="teacher TTS -> MFA/WORLD analysis -> Laya training JSONL",
+    )
+    corpus.add_argument("manifest", type=Path)
+    corpus.add_argument("--teacher-config", type=Path, required=True)
+    corpus.add_argument("--output-dir", type=Path, required=True)
+    corpus.add_argument("--chunk-size", type=int, default=4)
+    corpus.add_argument("--mfa-executable", default="mfa")
+    corpus.add_argument("--no-resume", action="store_true")
+
     return parser
 
 
@@ -128,6 +169,15 @@ def main() -> int:
             teacher_id=args.teacher_id,
             speaker_id=args.speaker_id,
             mfa_executable=args.mfa_executable,
+        )
+    if args.command == "build-corpus":
+        return _build_corpus(
+            manifest=args.manifest,
+            output_dir=args.output_dir,
+            teacher_config=args.teacher_config,
+            chunk_size=args.chunk_size,
+            mfa_executable=args.mfa_executable,
+            no_resume=args.no_resume,
         )
     raise AssertionError("unreachable")
 

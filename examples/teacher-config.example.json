@@ -1,0 +1,12 @@
+{
+  "teacher_id": "your-teacher",
+  "command": [
+    "python",
+    "path/to/your_teacher_cli.py",
+    "--text",
+    "{text}",
+    "--output",
+    "{output}"
+  ],
+  "timeout_s": 300
+}
