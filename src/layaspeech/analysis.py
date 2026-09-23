@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from .schema import F0Point, MoraFeatures, UtteranceProsody
 
@@ -31,7 +31,7 @@ class AlignedMora:
             raise ValueError("phoneme durations must be >= 0")
 
 
-def _energy_dbfs(samples: "object") -> float:
+def _energy_dbfs(samples: object) -> float:
     """Return RMS energy in dBFS for a normalized floating-point signal."""
 
     import numpy as np
@@ -80,8 +80,8 @@ def extract_world_features(
     boundaries = tuple(aligned_moras)
     features: list[MoraFeatures] = []
     for index, mora in enumerate(boundaries):
-        start_sample = max(0, int(round(mora.start_s * sample_rate)))
-        end_sample = min(len(audio), int(round(mora.end_s * sample_rate)))
+        start_sample = max(0, round(mora.start_s * sample_rate))
+        end_sample = min(len(audio), round(mora.end_s * sample_rate))
         if end_sample <= start_sample:
             raise ValueError(f"empty audio span for mora {index}: {mora.text}")
 

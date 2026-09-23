@@ -6,16 +6,16 @@ VOICEVOX model weights or engine code are bundled with LayaSpeech.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterable, Iterator
 from copy import deepcopy
 from dataclasses import dataclass
-import json
-from typing import Any, Iterable, Iterator
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from ..adapters import SynthesizerAdapter
-
 
 _PITCH_SEMITONES = {
     -3: -5.0,
@@ -174,7 +174,25 @@ class VoicevoxSynthesizer(SynthesizerAdapter):
 
         try:
             response = urlopen(request, timeout=self.timeout_s)
-        except (HTTPError, URLError) as exc:
+        except HTTPError as exc:
+            if exc.code != 404:
+                raise RuntimeError(
+                    f"VOICEVOX streaming synthesis failed: {exc}"
+                ) from exc
+            fallback_request = Request(
+                self._url("/synthesis", speaker=self.speaker),
+                data=json.dumps(query).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                response = urlopen(fallback_request, timeout=self.timeout_s)
+            except (HTTPError, URLError) as fallback_exc:
+                raise RuntimeError(
+                    "VOICEVOX synthesis failed after the streaming endpoint "
+                    f"was unavailable: {fallback_exc}"
+                ) from fallback_exc
+        except URLError as exc:
             raise RuntimeError(f"VOICEVOX streaming synthesis failed: {exc}") from exc
 
         try:

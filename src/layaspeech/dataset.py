@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Literal
 
+from .diagnostics import level_to_score_index
 from .policy import build_chunk_request
 from .schema import UtteranceProsody
 from .targets import MoraTarget, ProsodyBaseline, derive_targets
@@ -26,7 +28,7 @@ def _gold_for_target(
         f"{prefix}_pitch_level": {
             "probabilities": _one_hot(
                 [str(i) for i in range(7)],
-                str(target.pitch_level + 3),
+                str(level_to_score_index(target.pitch_level)),
             )
         },
         f"{prefix}_pitch_direction": {
@@ -38,13 +40,13 @@ def _gold_for_target(
         f"{prefix}_duration_level": {
             "probabilities": _one_hot(
                 [str(i) for i in range(7)],
-                str(target.duration_level + 3),
+                str(level_to_score_index(target.duration_level)),
             )
         },
         f"{prefix}_energy_level": {
             "probabilities": _one_hot(
                 [str(i) for i in range(7)],
-                str(target.energy_level + 3),
+                str(level_to_score_index(target.energy_level)),
             )
         },
         f"{prefix}_pause_after": {
@@ -101,6 +103,7 @@ def export_jsonl(
     output_path: str | Path,
     *,
     chunk_size: int = 4,
+    pitch_reference: Literal["speaker", "utterance"] = "speaker",
 ) -> int:
     """Export chunked Laya training cases using a corpus-wide baseline."""
 
@@ -115,7 +118,11 @@ def export_jsonl(
     count = 0
     with Path(output_path).open("w", encoding="utf-8", newline="\n") as handle:
         for utterance in records:
-            targets = derive_targets(utterance, baseline)
+            targets = derive_targets(
+                utterance,
+                baseline,
+                pitch_reference=pitch_reference,
+            )
             for start in range(0, len(targets), chunk_size):
                 end = min(len(targets), start + chunk_size)
                 row = to_upstream_row(

@@ -14,3 +14,17 @@ def test_moras_cli_parses_text() -> None:
     args = build_parser().parse_args(["moras", "こんにちは"])
     assert args.command == "moras"
     assert args.text == "こんにちは"
+
+
+def test_export_cli_accepts_utterance_pitch_reference() -> None:
+    args = build_parser().parse_args(
+        [
+            "export-jsonl",
+            "prosody.json",
+            "--output",
+            "train.jsonl",
+            "--pitch-reference",
+            "utterance",
+        ]
+    )
+    assert args.pitch_reference == "utterance"

@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from pathlib import Path
 import subprocess
 import tempfile
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .adapters import AcousticAnalyzer
 from .analysis import AlignedMora, extract_world_features
 from .schema import UtteranceProsody
-
 
 _SMALL_KANA = frozenset("ァィゥェォャュョヮヵヶ")
 _COMBINING_MARKS = frozenset("゙゚")
@@ -165,6 +164,7 @@ class MfaMoraAligner:
     dictionary_model: str = "japanese_mfa"
     acoustic_model: str = "japanese_mfa"
     g2p_model: str = "japanese_katakana_mfa"
+    beam: int = 100
     timeout_s: float = 180.0
 
     def align(self, text: str, audio_path: str | Path) -> tuple[AlignedMora, ...]:
@@ -200,6 +200,8 @@ class MfaMoraAligner:
                 "--no_tokenization",
                 "--g2p_model_path",
                 self.g2p_model,
+                "--beam",
+                str(self.beam),
                 "--clean",
             ]
             try:

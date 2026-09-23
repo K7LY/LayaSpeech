@@ -13,7 +13,7 @@ The teacher TTS is intentionally not bundled. It may be any command-line program
 ```powershell
 git clone https://github.com/K7LY/LayaSpeech.git
 cd LayaSpeech
-uv sync --extra dev --extra analysis --extra alignment --extra train
+uv sync --extra dev --extra analysis --extra alignment --extra train --extra cuda
 uv run pytest
 uv run layaspeech targets examples/sample_prosody.json
 ```
@@ -25,6 +25,8 @@ For routine local checks:
 ```
 
 No GitHub Actions workflow is required or used.
+
+The `cuda` extra selects PyTorch's CUDA 12.8 wheels on Windows and Linux. Omit it only for workflows that do not run Laya training or inference on NVIDIA hardware.
 
 ## 3. Install Montreal Forced Aligner
 

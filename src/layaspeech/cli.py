@@ -31,10 +31,20 @@ def _targets(path: Path) -> int:
     return 0
 
 
-def _export(inputs: list[Path], output: Path, chunk_size: int) -> int:
+def _export(
+    inputs: list[Path],
+    output: Path,
+    chunk_size: int,
+    pitch_reference: str,
+) -> int:
     utterances = [UtteranceProsody.load(path) for path in inputs]
     output.parent.mkdir(parents=True, exist_ok=True)
-    count = export_jsonl(utterances, output, chunk_size=chunk_size)
+    count = export_jsonl(
+        utterances,
+        output,
+        chunk_size=chunk_size,
+        pitch_reference=pitch_reference,
+    )
     print(f"exported {count} chunk training cases to {output}")
     return 0
 
@@ -113,6 +123,9 @@ def _train(
     micro_batch: int,
     grad_accum: int,
     group_size: int,
+    loss_mode: str,
+    controls: list[str],
+    diagnostic_steps: list[int],
 ) -> int:
     from .training import TrainingConfig, train_local
 
@@ -121,6 +134,9 @@ def _train(
         micro_batch=micro_batch,
         grad_accum=grad_accum,
         group_size=group_size,
+        loss_mode=loss_mode,
+        control_names=tuple(controls),
+        diagnostic_steps=tuple(diagnostic_steps),
     )
     metadata = train_local(
         training_jsonl=training_jsonl,
@@ -219,6 +235,11 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("inputs", type=Path, nargs="+")
     export.add_argument("-o", "--output", type=Path, required=True)
     export.add_argument("--chunk-size", type=int, default=4)
+    export.add_argument(
+        "--pitch-reference",
+        choices=("speaker", "utterance"),
+        default="speaker",
+    )
 
     moras = subparsers.add_parser(
         "moras",
@@ -262,6 +283,15 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--micro-batch", type=int, default=2)
     train.add_argument("--grad-accum", type=int, default=8)
     train.add_argument("--group-size", type=int, default=4)
+    train.add_argument("--loss-mode", choices=("ce", "rlcd_ce"), default="rlcd_ce")
+    train.add_argument("--control", action="append", default=[])
+    train.add_argument(
+        "--diagnostic-step",
+        action="append",
+        type=int,
+        default=None,
+        help="optimizer step to snapshot; repeatable (default: 0, 1, 10, 100)",
+    )
 
     predict = subparsers.add_parser(
         "predict",
@@ -293,7 +323,7 @@ def main() -> int:
     if args.command == "targets":
         return _targets(args.input)
     if args.command == "export-jsonl":
-        return _export(args.inputs, args.output, args.chunk_size)
+        return _export(args.inputs, args.output, args.chunk_size, args.pitch_reference)
     if args.command == "moras":
         return _moras(args.text)
     if args.command == "analyze":
@@ -327,6 +357,11 @@ def main() -> int:
             micro_batch=args.micro_batch,
             grad_accum=args.grad_accum,
             group_size=args.group_size,
+            loss_mode=args.loss_mode,
+            controls=args.control,
+            diagnostic_steps=(
+                args.diagnostic_step if args.diagnostic_step is not None else [0, 1, 10, 100]
+            ),
         )
     if args.command == "predict":
         return _predict(

@@ -102,3 +102,23 @@ Laya training JSONL
 
 The remaining work here is environmental validation against real MFA/Irodori
 outputs and expanding special-mora coverage.
+
+## Pitch reference
+
+The default `speaker` pitch reference compares mora F0 with a corpus-wide
+speaker median. This is appropriate only when the teacher corpus uses a stable
+speaker identity. A no-reference TTS teacher may change voice register between
+utterances; in that case the global target confounds speaker identity with
+prosody.
+
+Use utterance-local residual pitch targets for that corpus:
+
+```bash
+uv run layaspeech export-jsonl prosody/*.json \
+  --output train.jsonl \
+  --pitch-reference utterance
+```
+
+This subtracts each utterance's median F0 before seven-level quantization. It
+does not change pitch-direction, duration, energy, or pause targets. Prefer a
+fixed reference voice and `speaker` mode when the teacher supports one.

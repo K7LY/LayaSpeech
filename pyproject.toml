@@ -13,9 +13,20 @@ dependencies = []
 [project.optional-dependencies]
 laya = ["laya>=0.3.6"]
 train = ["laya>=0.3.6"]
+cuda = ["torch>=2.10.0,<2.11.0"]
 analysis = ["numpy>=1.26", "soundfile>=0.13", "pyworld-prebuilt>=0.3.6.post1"]
 alignment = ["pyopenjtalk-plus>=0.4.1.post9"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu128", extra = "cuda", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [project.scripts]
 layaspeech = "layaspeech.cli:main"

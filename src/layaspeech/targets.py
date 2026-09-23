@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from bisect import bisect_right
 import math
+from bisect import bisect_right
+from collections.abc import Iterable
+from dataclasses import dataclass
 from statistics import median
-from typing import Iterable, Literal
+from typing import Literal
 
 from .schema import MoraFeatures, UtteranceProsody
 
-
 PitchDirection = Literal["falling", "level", "rising"]
 PauseClass = Literal["none", "short", "medium", "long"]
+
+_PITCH_THRESHOLDS_SEMITONES = (-12.0, -6.0, -2.0, 2.0, 6.0, 12.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +26,7 @@ class ProsodyBaseline:
     energy_dbfs: float
 
     @classmethod
-    def from_utterances(cls, utterances: Iterable[UtteranceProsody]) -> "ProsodyBaseline":
+    def from_utterances(cls, utterances: Iterable[UtteranceProsody]) -> ProsodyBaseline:
         f0: list[float] = []
         duration: list[float] = []
         energy: list[float] = []
@@ -110,11 +112,21 @@ def _pause_class(seconds: float) -> PauseClass:
 def derive_targets(
     utterance: UtteranceProsody,
     baseline: ProsodyBaseline,
+    *,
+    pitch_reference: Literal["speaker", "utterance"] = "speaker",
 ) -> tuple[MoraTarget, ...]:
     """Quantize teacher acoustics into the first LayaSpeech PoC target space."""
 
     if baseline.f0_hz <= 0 or baseline.mora_duration_s <= 0:
         raise ValueError("baseline F0 and duration must be > 0")
+    if pitch_reference not in {"speaker", "utterance"}:
+        raise ValueError("pitch_reference must be 'speaker' or 'utterance'")
+
+    pitch_baseline_hz = baseline.f0_hz
+    if pitch_reference == "utterance":
+        utterance_f0 = [point.hz for mora in utterance.moras for point in mora.f0_contour]
+        if utterance_f0:
+            pitch_baseline_hz = float(median(utterance_f0))
 
     targets: list[MoraTarget] = []
     for index, mora in enumerate(utterance.moras):
@@ -122,7 +134,7 @@ def derive_targets(
         if representative_f0 is None:
             pitch_delta_st = 0.0
         else:
-            pitch_delta_st = 12.0 * math.log2(representative_f0 / baseline.f0_hz)
+            pitch_delta_st = 12.0 * math.log2(representative_f0 / pitch_baseline_hz)
 
         duration_ratio = mora.duration_s / baseline.mora_duration_s
         energy_delta_db = (
@@ -135,7 +147,7 @@ def derive_targets(
                 text=mora.text,
                 pitch_level=_seven_level(
                     pitch_delta_st,
-                    (-4.0, -2.0, -0.75, 0.75, 2.0, 4.0),
+                    _PITCH_THRESHOLDS_SEMITONES,
                 ),
                 pitch_direction=_pitch_direction(mora),
                 duration_level=_seven_level(

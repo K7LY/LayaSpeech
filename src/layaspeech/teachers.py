@@ -6,11 +6,11 @@ connect any CLI-capable teacher without adding its weights or dependencies here.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import subprocess
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
 
 from .adapters import TeacherAdapter, TeacherResult
 

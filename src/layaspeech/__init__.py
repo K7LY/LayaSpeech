@@ -6,9 +6,9 @@ from .targets import MoraTarget, ProsodyBaseline, derive_targets
 __all__ = [
     "F0Point",
     "MoraFeatures",
-    "UtteranceProsody",
     "MoraTarget",
     "ProsodyBaseline",
+    "UtteranceProsody",
     "derive_targets",
 ]
 
