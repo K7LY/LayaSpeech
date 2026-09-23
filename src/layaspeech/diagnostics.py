@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Iterable
 from typing import Any
@@ -30,7 +31,9 @@ def _to_internal(question: dict[str, Any]) -> dict[str, Any]:
     if qtype == "choice" and isinstance(criteria, list):
         criteria = {value: None for value in criteria}
     instructions = question["instructions"]
-    return {"t": qtype, "ins": str(instructions), "crit": criteria}
+    if not isinstance(instructions, str):
+        instructions = json.dumps(instructions, ensure_ascii=False)
+    return {"t": qtype, "ins": instructions, "crit": criteria}
 
 
 def _ordered_probabilities(

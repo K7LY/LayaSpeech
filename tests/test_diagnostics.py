@@ -4,10 +4,18 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from layaspeech.diagnostics import (
+    _to_internal,
     audit_training_rows,
     level_to_score_index,
     score_index_to_level,
 )
+
+
+def test_audit_serializes_structured_instructions_like_training() -> None:
+    internal = _to_internal(
+        {"type": "score", "instructions": {"focus": "ア"}, "criteria": ["low", "high"]}
+    )
+    assert internal["ins"] == '{"focus": "ア"}'
 
 
 def test_score_level_indices_round_trip() -> None:
