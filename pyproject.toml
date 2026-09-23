@@ -12,6 +12,7 @@ dependencies = []
 
 [project.optional-dependencies]
 laya = ["laya>=0.3.6"]
+train = ["laya>=0.3.6"]
 analysis = ["numpy>=1.26", "soundfile>=0.13", "pyworld-prebuilt>=0.3.6.post1"]
 alignment = ["pyopenjtalk-plus>=0.4.1.post9"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
