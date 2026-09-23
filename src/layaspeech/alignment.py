@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from pathlib import Path
 import subprocess
 import tempfile
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .adapters import AcousticAnalyzer
 from .analysis import AlignedMora, extract_world_features
 from .schema import UtteranceProsody
-
 
 _SMALL_KANA = frozenset("ァィゥェォャュョヮヵヶ")
 _COMBINING_MARKS = frozenset("゙゚")

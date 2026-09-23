@@ -7,13 +7,14 @@ policy-gradient guidance with ordinary soft cross-entropy.
 
 from __future__ import annotations
 
-from contextlib import nullcontext
-from dataclasses import asdict, dataclass
 import json
 import math
-from pathlib import Path
 import random
-from typing import Any, Iterable
+from collections.abc import Iterable
+from contextlib import nullcontext
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,8 +228,8 @@ def train_local(
     config = config or TrainingConfig()
 
     try:
-        import torch
         import laya
+        import torch
         from laya.common import collate_items, proper_reward
     except ImportError as exc:
         raise RuntimeError(
@@ -310,9 +311,9 @@ def train_local(
         progress = epoch / max(1, config.epochs - 1)
         sigma = config.sigma_start + (config.sigma_end - config.sigma_start) * progress
         epoch_losses: list[float] = []
-        accumulation = 0
-
-        for offset in range(0, len(train_items), config.micro_batch):
+        for accumulation, offset in enumerate(
+            range(0, len(train_items), config.micro_batch), start=1
+        ):
             chunk = train_items[offset : offset + config.micro_batch]
             batch = collate_items([[item] for item in chunk], agent.tok.pad_token_id)
             context = (
@@ -380,7 +381,6 @@ def train_local(
             else:
                 loss.backward()
 
-            accumulation += 1
             last_batch = offset + config.micro_batch >= len(train_items)
             if accumulation % config.grad_accum == 0 or last_batch:
                 if scaler.is_enabled():

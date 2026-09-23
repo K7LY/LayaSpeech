@@ -6,16 +6,16 @@ VOICEVOX model weights or engine code are bundled with LayaSpeech.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterable, Iterator
 from copy import deepcopy
 from dataclasses import dataclass
-import json
-from typing import Any, Iterable, Iterator
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from ..adapters import SynthesizerAdapter
-
 
 _PITCH_SEMITONES = {
     -3: -5.0,

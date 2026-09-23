@@ -7,8 +7,8 @@ audio or rerunning acoustic analysis.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -104,7 +104,7 @@ class UtteranceProsody:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "UtteranceProsody":
+    def from_dict(cls, data: dict[str, Any]) -> UtteranceProsody:
         moras = tuple(
             MoraFeatures(
                 text=mora["text"],
@@ -136,11 +136,11 @@ class UtteranceProsody:
         )
 
     @classmethod
-    def from_json(cls, payload: str) -> "UtteranceProsody":
+    def from_json(cls, payload: str) -> UtteranceProsody:
         return cls.from_dict(json.loads(payload))
 
     @classmethod
-    def load(cls, path: str | Path) -> "UtteranceProsody":
+    def load(cls, path: str | Path) -> UtteranceProsody:
         return cls.from_json(Path(path).read_text(encoding="utf-8"))
 
     def save(self, path: str | Path) -> None:

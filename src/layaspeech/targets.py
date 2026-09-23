@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from bisect import bisect_right
 import math
+from bisect import bisect_right
+from collections.abc import Iterable
+from dataclasses import dataclass
 from statistics import median
-from typing import Iterable, Literal
+from typing import Literal
 
 from .schema import MoraFeatures, UtteranceProsody
-
 
 PitchDirection = Literal["falling", "level", "rising"]
 PauseClass = Literal["none", "short", "medium", "long"]
@@ -24,7 +24,7 @@ class ProsodyBaseline:
     energy_dbfs: float
 
     @classmethod
-    def from_utterances(cls, utterances: Iterable[UtteranceProsody]) -> "ProsodyBaseline":
+    def from_utterances(cls, utterances: Iterable[UtteranceProsody]) -> ProsodyBaseline:
         f0: list[float] = []
         duration: list[float] = []
         energy: list[float] = []
