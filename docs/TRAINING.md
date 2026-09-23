@@ -4,6 +4,14 @@ LayaSpeech includes a single-device trainer rather than CI/cloud training. **Git
 
 For complete setup, start with [Getting Started](GETTING_STARTED.md).
 
+Install the NVIDIA training environment explicitly on Windows or Linux:
+
+```bash
+uv sync --extra train --extra cuda
+```
+
+The `cuda` extra selects PyTorch's CUDA 12.8 wheels. A plain `--extra train` install may resolve a CPU-only PyTorch build and is not sufficient for GPU training.
+
 ## Input and objective
 
 The trainer consumes chunked `state/questions/gold` JSONL produced by `export-jsonl` or `build-corpus`.
