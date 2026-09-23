@@ -102,6 +102,63 @@ def _build_corpus(
     return 0
 
 
+def _train(
+    *,
+    training_jsonl: Path,
+    output_dir: Path,
+    model_id: str,
+    subfolder: str | None,
+    device: str | None,
+    epochs: int,
+    micro_batch: int,
+    grad_accum: int,
+    group_size: int,
+) -> int:
+    from .training import TrainingConfig, train_local
+
+    config = TrainingConfig(
+        epochs=epochs,
+        micro_batch=micro_batch,
+        grad_accum=grad_accum,
+        group_size=group_size,
+    )
+    metadata = train_local(
+        training_jsonl=training_jsonl,
+        output_dir=output_dir,
+        model_id=model_id,
+        subfolder=subfolder,
+        device=device,
+        config=config,
+    )
+    print(json.dumps(metadata, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _predict(
+    *,
+    text: str,
+    checkpoint: Path,
+    device: str | None,
+    chunk_size: int,
+) -> int:
+    from .alignment import text_to_katakana_moras
+    from .policy import LayaProsodyPolicy
+
+    moras = text_to_katakana_moras(text)
+    policy = LayaProsodyPolicy(
+        model_id=str(checkpoint),
+        subfolder=None,
+        device=device,
+    )
+    predictions = policy.predict_utterance(
+        text=text,
+        moras=moras,
+        chunk_size=chunk_size,
+    )
+    print(json.dumps(predictions, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="layaspeech")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -149,6 +206,29 @@ def build_parser() -> argparse.ArgumentParser:
     corpus.add_argument("--mfa-executable", default="mfa")
     corpus.add_argument("--no-resume", action="store_true")
 
+    train = subparsers.add_parser(
+        "train",
+        help="fine-tune a local Laya checkpoint from exported training JSONL",
+    )
+    train.add_argument("training_jsonl", type=Path)
+    train.add_argument("--output-dir", type=Path, required=True)
+    train.add_argument("--model-id", default="convaiinnovations/laya")
+    train.add_argument("--subfolder", default="multilingual")
+    train.add_argument("--device")
+    train.add_argument("--epochs", type=int, default=3)
+    train.add_argument("--micro-batch", type=int, default=2)
+    train.add_argument("--grad-accum", type=int, default=8)
+    train.add_argument("--group-size", type=int, default=4)
+
+    predict = subparsers.add_parser(
+        "predict",
+        help="predict prosody controls from a fine-tuned local checkpoint",
+    )
+    predict.add_argument("text")
+    predict.add_argument("--checkpoint", type=Path, required=True)
+    predict.add_argument("--device")
+    predict.add_argument("--chunk-size", type=int, default=4)
+
     return parser
 
 
@@ -178,6 +258,26 @@ def main() -> int:
             chunk_size=args.chunk_size,
             mfa_executable=args.mfa_executable,
             no_resume=args.no_resume,
+        )
+    if args.command == "train":
+        subfolder = None if args.subfolder.lower() in {"none", "root", ""} else args.subfolder
+        return _train(
+            training_jsonl=args.training_jsonl,
+            output_dir=args.output_dir,
+            model_id=args.model_id,
+            subfolder=subfolder,
+            device=args.device,
+            epochs=args.epochs,
+            micro_batch=args.micro_batch,
+            grad_accum=args.grad_accum,
+            group_size=args.group_size,
+        )
+    if args.command == "predict":
+        return _predict(
+            text=args.text,
+            checkpoint=args.checkpoint,
+            device=args.device,
+            chunk_size=args.chunk_size,
         )
     raise AssertionError("unreachable")
 

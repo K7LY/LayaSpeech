@@ -64,7 +64,11 @@ src/layaspeech/
 ├── analysis.py     # WORLD F0/energy extraction from aligned moras
 ├── targets.py      # acoustic features -> compact Laya targets
 ├── dataset.py      # Laya-compatible training JSONL export
-├── policy.py       # Laya request/inference adapter
+├── policy.py       # batched Laya prosody inference
+├── runtime.py      # streaming-oriented prosody planning
+├── training.py     # local single-GPU fine-tuning
+├── teachers.py     # generic external teacher adapter
+├── corpus.py       # resumable teacher -> training corpus pipeline
 ├── adapters.py     # teacher, analyzer, synthesizer interfaces
 └── cli.py
 
@@ -94,12 +98,38 @@ Export analyzed utterances to the `state/questions/gold` JSONL shape used by Lay
 uv run layaspeech export-jsonl examples/sample_prosody.json -o train.jsonl
 ```
 
-Optional components:
+Build a teacher corpus:
 
 ```bash
-uv sync --extra laya
-uv sync --extra analysis
+uv run layaspeech build-corpus examples/manifest.jsonl \
+  --teacher-config teacher.json \
+  --output-dir data/my-corpus
 ```
+
+Fine-tune locally:
+
+```bash
+uv sync --extra train
+uv run layaspeech train data/my-corpus/train.jsonl \
+  --output-dir checkpoints/layaspeech
+```
+
+Inspect prosody predictions:
+
+```bash
+uv run layaspeech predict "今日はいい天気ですね。" \
+  --checkpoint checkpoints/layaspeech
+```
+
+Optional analysis/frontend dependencies:
+
+```bash
+uv sync --extra analysis
+uv sync --extra alignment
+```
+
+No GitHub Actions workflows are used; model generation, tests, and training are
+intended to run locally.
 
 The initial Japanese runtime uses Laya's multilingual checkpoint unless a fine-tuned checkpoint is supplied.
 
@@ -126,11 +156,17 @@ Completed foundation:
 - common high-resolution prosody schema
 - relative speaker/teacher baseline calculation
 - first 7-level target quantization
-- Laya request builder for five prosody controls
+- batched multi-mora Laya request builder for five prosody controls
 - Laya-compatible fine-tuning JSONL export
-- swappable teacher/analyzer/synthesizer interfaces
-- WORLD-based F0 and energy extraction for aligned moras
-- dependency-free dataset inspection/export CLI
-- unit tests for schema, targets, dataset export, and analysis helpers
+- generic external teacher command adapter and resumable corpus builder
+- OpenJTalk + MFA mora-token alignment path
+- WORLD-based F0 and energy extraction
+- local single-GPU RLCD-style + CE fine-tuning
+- streaming-oriented chunked prosody planning
+- CLI paths for corpus build, training, and inference
 
-Current blocker: automatic Japanese phone-to-mora alignment from forced-aligner output.
+Current blockers before the first real end-to-end result:
+
+- validate MFA mora-token alignment against real teacher WAVs, especially `ッ` and `ー`;
+- choose and implement the first synthesizer backend that accepts LayaSpeech controls;
+- benchmark quality and first-audio latency on a real distilled checkpoint.

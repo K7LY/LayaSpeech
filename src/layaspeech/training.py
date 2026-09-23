@@ -8,14 +8,12 @@ policy-gradient guidance with ordinary soft cross-entropy.
 from __future__ import annotations
 
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import json
 import math
 from pathlib import Path
 import random
 from typing import Any, Iterable
-
-from .dataset import _one_hot
 
 
 @dataclass(frozen=True, slots=True)
@@ -417,7 +415,7 @@ def train_local(
             agent,
             Path(output_dir) / "checkpoint_latest",
             {
-                "config": config.__dict__,
+                "config": asdict(config),
                 "model_id": model_id,
                 "subfolder": subfolder,
                 "device": str(resolved_device),
@@ -428,7 +426,7 @@ def train_local(
         )
 
     final_meta = {
-        "config": config.__dict__,
+        "config": asdict(config),
         "model_id": model_id,
         "subfolder": subfolder,
         "device": str(resolved_device),
