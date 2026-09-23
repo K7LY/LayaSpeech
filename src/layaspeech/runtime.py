@@ -1,14 +1,11 @@
-"""Streaming-oriented runtime planning.
-
-This module does not generate waveforms. It prepares bounded prosody chunks so a
-synthesizer backend can render the next chunk while the current one is playing.
-"""
+"""Streaming-oriented runtime orchestration."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Iterator
 
+from .adapters import SynthesizerAdapter
 from .alignment import text_to_katakana_moras
 from .policy import LayaProsodyPolicy
 
@@ -37,7 +34,7 @@ class StreamingProsodyPlanner:
         previous_text: str | None = None,
         next_text: str | None = None,
     ) -> Iterator[ProsodyChunk]:
-        """Yield predicted chunks incrementally instead of waiting for the full sentence."""
+        """Yield predicted chunks instead of building one huge decision request."""
 
         moras = text_to_katakana_moras(text)
         for start in range(0, len(moras), self.chunk_size):
@@ -56,3 +53,31 @@ class StreamingProsodyPlanner:
                 moras=moras[start:end],
                 controls=tuple(controls),
             )
+
+
+@dataclass(slots=True)
+class StreamingSpeechRuntime:
+    """Connect a fine-tuned Laya policy to a streaming synthesizer backend."""
+
+    planner: StreamingProsodyPlanner
+    synthesizer: SynthesizerAdapter
+
+    def synthesize_stream(
+        self,
+        text: str,
+        *,
+        previous_text: str | None = None,
+        next_text: str | None = None,
+    ) -> Iterator[bytes]:
+        controls: list[dict[str, Any]] = []
+        for chunk in self.planner.plan(
+            text,
+            previous_text=previous_text,
+            next_text=next_text,
+        ):
+            controls.extend(chunk.controls)
+
+        yield from self.synthesizer.synthesize_stream(
+            text=text,
+            prosody=controls,
+        )
