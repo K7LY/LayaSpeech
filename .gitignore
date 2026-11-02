@@ -24,6 +24,10 @@ venv/
 .env
 .env.*
 !.env.example
+teacher.json
+
+# Local research artifacts
+.poc-local/
 
 # Models, datasets, and generated artifacts
 models/

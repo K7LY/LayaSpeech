@@ -4,7 +4,7 @@
 
 LayaSpeech does not generate waveforms with Laya. Laya predicts **how to speak**: relative pitch, duration, energy, pauses, and related prosodic controls. A separate synthesizer produces the audio.
 
-> **Status:** early proof of concept. The pipeline is implemented, but real teacher-corpus training and end-to-end quality/latency validation are still in progress.
+> **Status:** early proof of concept. The pipeline and small-scale teacher-corpus experiments are implemented, but held-out prosody quality and end-to-end latency validation are still in progress.
 
 ## How it works
 
@@ -62,6 +62,12 @@ The check script runs dependency setup, pytest, Python compilation, and Ruff loc
 
 - MFA mora-token alignment still needs validation against real teacher WAVs.
 - Standalone `ッ` and `ー` are conservatively rejected by the current aligner.
-- A real teacher corpus and fine-tuned checkpoint still need to be produced.
+- Small teacher-corpus experiments and local checkpoints exist, but no release-ready checkpoint has been validated or distributed.
 - Speech quality and first-audio latency have not yet been benchmarked.
 - VOICEVOX AudioQuery currently maps pitch level, duration, and existing phrase-boundary pauses. Pitch direction and per-mora energy are retained for future backends.
+
+## License
+
+The LayaSpeech framework source code is licensed under the [Apache License, Version 2.0](LICENSE).
+
+Third-party software, pretrained models, voice data, and generated training assets are **not** licensed by LayaSpeech; their respective licenses and usage terms apply.
